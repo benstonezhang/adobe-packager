@@ -401,13 +401,13 @@ def download_APRO(appInfo, cdn):
     dest = get_download_path()
     sapCode = appInfo['sapCode']
     version = appInfo['productVersion']
-    name = 'Intall {}_{}_{}.dmg'.format(sapCode, version, appInfo['apPlatform'])
+    name = '{}_{}_{}.dmg'.format(sapCode, version, appInfo['apPlatform'])
     print('')
     print('sapCode: ' + sapCode)
     print('version: ' + version)
     print('installLanguage: ' + 'ALL')
     print('dest: ' + os.path.join(dest, name))
-    
+
     print('\nDownloading...\n')
 
     print('[{}_{}] Selected 1 package'.format(sapCode, version))
@@ -475,7 +475,7 @@ def runccdl():
     else:
         allowedPlatforms.append('osx10-64')
         allowedPlatforms.append('osx10')
-    
+
     productsPlatform = 'osx10-64,osx10,macarm64,macuniversal'
     adobeurl = ADOBE_PRODUCTS_XML_URL.format(urlVersion=selectedVersion, installPlatform=productsPlatform)
 
@@ -558,7 +558,7 @@ def runccdl():
     if sapCode == 'APRO':
         download_APRO(versions[version], cdn)
         return
-    
+
     # TODO: Parase languages in the xml
     langs = ['en_US', 'en_GB', 'en_IL', 'en_AE', 'es_ES', 'es_MX', 'pt_BR', 'fr_FR', 'fr_CA', 'fr_MA', 'it_IT', 'de_DE', 'nl_NL',
              'ru_RU', 'uk_UA', 'zh_TW', 'zh_CN', 'ja_JP', 'ko_KR', 'pl_PL', 'hu_HU', 'cs_CZ', 'tr_TR', 'sv_SE', 'nb_NO', 'fi_FI', 'da_DK', 'ALL']
@@ -567,7 +567,7 @@ def runccdl():
     deflocal = deflocal[0]
     if not deflocal:
         deflocal = 'en_US'
-    
+
     oslang = None
     if args.osLanguage:
         oslang = args.osLanguage
@@ -610,7 +610,7 @@ def runccdl():
                 if oslang not in langs:
                     print(
                         '{} is not available. Please use a value from the list above.'.format(oslang))
-    
+
     dest = get_download_path()
 
     print('')
@@ -743,9 +743,9 @@ if __name__ == '__main__':
                         help='Language code (eg. en_US)', action='store')
     parser.add_argument('-o', '--osLanguage',
                         help='OS Language code (eg. en_US)', action='store')
-    parser.add_argument('-s', '--sapCode', 
+    parser.add_argument('-s', '--sapCode',
                         help='SAP code for desired product (eg. PHSP)', action='store')
-    parser.add_argument('-v', '--version', 
+    parser.add_argument('-v', '--version',
                         help='Version of desired product (eg. 21.0.3)', action='store')
     parser.add_argument('-d', '--destination',
                         help='Directory to download installation files to', action='store')
@@ -757,9 +757,9 @@ if __name__ == '__main__':
                         help='Add a bearer_token to to authenticate your account, e.g. downloading Xd', action='store')
     parser.add_argument('--ignoreNoCreativeCloud',
                         help='Ignore no creative cloud and just fallback to generic icon', action='store_true')
-    parser.add_argument('--noRepeatPrompt', 
+    parser.add_argument('--noRepeatPrompt',
                         help="Don't prompt for additional downloads", action='store_true')
-    parser.add_argument('--skipExisting', 
+    parser.add_argument('--skipExisting',
                         help="Skip existing files, e.g. resuming failed downloads", action='store_true')
     args = parser.parse_args()
 
