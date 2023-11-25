@@ -43,7 +43,7 @@ Yes, I am not the original creator of this script and so far I have only formatt
 - [x] Find a way to download Adobe Acrobat
 - [x] Fix the script for downloading applications via xml v5
 - [x] Find the difference between xml v5 and v4
-- [ ] Refactoring the script - split it into different files
+- [x] Refactoring the script - split it into different files
 - [ ] Make the script fully or partially cross-platform
 - [ ] Make interactive examples of requests for downloading an xml file in the browser
 - [ ] Make it possible to select the language of the program in installer GUI

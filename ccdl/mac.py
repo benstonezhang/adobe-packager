@@ -3,7 +3,7 @@ import platform
 import shutil
 from subprocess import PIPE, Popen
 
-import cc_utils
+from ccdl.utils import question_y
 
 ADOBE_PRODUCTS_PLATFORMS = ['macuniversal', 'osx10', 'osx10-64', 'macarm64']
 
@@ -93,7 +93,6 @@ function shellescape(a) {
 
 function run() {
   const appPath = app.pathTo(this).toString()
-  //const driverPath = appPath.substring(0, appPath.lastIndexOf('/')) + '/products/driver.xml'
   const driverPath = appPath + '/Contents/Resources/products/driver.xml'
   const hyperDrivePath = '/Library/Application Support/Adobe/Adobe Desktop Common/HDBox/Setup'
 
@@ -169,17 +168,20 @@ function run() {
 
 
 def get_platforms(target_arch):
+    if target_arch is None:
+        return ADOBE_PRODUCTS_PLATFORMS
+
     is_arm = None
-    if target_arch:
-        if target_arch == 'x86_64' or target_arch == 'x64' or target_arch == 'intel':
-            is_arm = False
-        elif target_arch == 'arm64' or target_arch == 'arm':
-            is_arm = True
-        else:
-            print('Invalid argument "{}" for {}'.format(target_arch, 'architecture'))
+    if target_arch == 'x86_64' or target_arch == 'x64' or target_arch == 'intel':
+        is_arm = False
+    elif target_arch == 'arm64' or target_arch == 'arm':
+        is_arm = True
+    else:
+        print('Invalid argument "{}" for {}'.format(target_arch, 'architecture'))
+
     if is_arm is None:
         if platform.machine() == 'arm64':
-            is_arm = cc_utils.question_y('Do you want to make M1 native packages')
+            is_arm = question_y('Do you want to make M1 native packages')
         else:
             is_arm = False
 

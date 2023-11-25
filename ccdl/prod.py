@@ -1,18 +1,7 @@
-import json
-import os
-import random
-import string
 from collections import OrderedDict
 from xml.etree import ElementTree as ET
 
-import requests
-
-from cc_utils import get_progress_bar
-
-session = requests.sessions.Session()
-
-ADOBE_PRODUCTS_XML_URL = 'https://prod-rel-ffc-ccm.oobesaas.adobe.com/adobe-ffc-external/core/v{urlVersion}/products/all?_type=xml&channel=ccm&channel=sti&platform={installPlatform}&productType=Desktop'
-ADOBE_APPLICATION_JSON_URL = 'https://cdn-ffc.oobesaas.adobe.com/core/v3/applications'
+from ccdl.net import set_cdn, set_header_auth, fetch_products_xml
 
 DRIVER_XML = '''<DriverInfo>
     <ProductInfo>
@@ -38,52 +27,15 @@ DRIVER_XML_DEPENDENCY = '''
             </Dependency>
 '''
 
-ADOBE_REQ_HEADERS = {
-    'X-Adobe-App-Id': 'accc-apps-panel-desktop',
-    'User-Agent': 'Adobe Application Manager 2.0',
-    'X-Api-Key': 'CC_HD_ESD_1_0',
-    'Cookie': 'fg=' + ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(26)) + '======'
-}
 
-ADOBE_DL_HEADERS = {
-    'User-Agent': 'Creative Cloud'
-}
+def parse_products_xml(products_xml_text, url_version, allowed_platforms):
+    """Parsing the XML."""
+    products_xml = ET.fromstring(products_xml_text)
 
-
-def fetch_url(url, headers=ADOBE_REQ_HEADERS):
-    """Retrieve a from a url as a string."""
-    req = session.get(url, headers=headers)
-    req.encoding = 'utf-8'
-    return req.text
-
-
-def load_products_xml(file_path):
-    """First stage of parsing the XML from file."""
-    print('Read products xml from ' + file_path)
-    with open(file_path, 'r') as f:
-        products_xml_text = f.read()
-    return ET.fromstring(products_xml_text)
-
-
-def fetch_products_xml(url_version, allowed_platforms, file_path=None):
-    """First stage of parsing the XML from network."""
-    adobe_url = ADOBE_PRODUCTS_XML_URL.format(urlVersion=url_version, installPlatform=','.join(allowed_platforms))
-    print('Downloading products xml from: ' + adobe_url)
-    products_xml_text = fetch_url(adobe_url)
-    if file_path:
-        print('Save products xml to ' + file_path)
-        with open(file_path, 'w') as f:
-            f.write(products_xml_text)
-    return ET.fromstring(products_xml_text)
-
-
-def parse_products_xml(products_xml, url_version, allowed_platforms):
-    """2nd stage of parsing the XML."""
     if url_version == 6:
         prefix = 'channels/'
     else:
         prefix = ''
-
     cdn = products_xml.find(prefix + 'channel/cdn/secure').text
     products = {}
     parent_map = {c: p for p in products_xml.iter() for c in p}
@@ -135,40 +87,6 @@ def parse_products_xml(products_xml, url_version, allowed_platforms):
     return products, cdn
 
 
-def fetch_application_json(build_guid):
-    """Retrieve JSON."""
-    headers = ADOBE_REQ_HEADERS.copy()
-    headers['x-adobe-build-guid'] = build_guid
-    return json.loads(fetch_url(ADOBE_APPLICATION_JSON_URL, headers))
-
-
-def fetch_file(url, product_dir, sap_code, version, skip_existing=False, name=None):
-    """Download a file"""
-    if not name:
-        name = url.split('/')[-1].split('?')[0]
-    print('Url is: ' + url)
-    print('[{}_{}] Downloading {}'.format(sap_code, version, name))
-
-    file_path = os.path.join(product_dir, name)
-    response = session.head(url, stream=True, headers=ADOBE_DL_HEADERS)
-    total_size_in_bytes = int(response.headers.get('content-length', 0))
-
-    if skip_existing and os.path.isfile(file_path) and os.path.getsize(file_path) == total_size_in_bytes:
-        print('[{}_{}] {} already exists, skipping'.format(sap_code, version, name))
-    else:
-        response = session.get(url, stream=True, headers=ADOBE_REQ_HEADERS)
-        total_size_in_bytes = int(response.headers.get('content-length', 0))
-        block_size = 1024  # 1 Kibibyte
-        progress_bar = get_progress_bar(total_size_in_bytes)
-        with open(file_path, 'wb') as file:
-            for data in response.iter_content(block_size):
-                progress_bar.update(len(data))
-                file.write(data)
-        progress_bar.close()
-        if total_size_in_bytes != 0 and progress_bar.n != total_size_in_bytes:
-            print("ERROR, something went wrong")
-
-
 def get_url_version(url_version):
     if url_version:
         if url_version.lower() == "v4" or url_version == "4":
@@ -197,26 +115,17 @@ def get_url_version(url_version):
 
 
 def get_products(allowed_platforms, args):
-    if args.auth:
-        ADOBE_REQ_HEADERS['Authorization'] = args.auth
+    set_header_auth(args.auth)
 
     url_version = get_url_version(args.urlVersion)
-
-    products_xml_file = None
-    products_xml = None
-    if args.cache:
-        products_xml_file = os.path.join(args.cache,
-                                         'products_' + str(url_version) + '_' + '.'.join(allowed_platforms) + '.xml')
-        if os.path.exists(products_xml_file):
-            products_xml = load_products_xml(products_xml_file)
-
-    if products_xml is None:
-        products_xml = fetch_products_xml(url_version, allowed_platforms, products_xml_file)
+    products_xml_text = fetch_products_xml(url_version, allowed_platforms)
 
     print('Parsing products.xml')
-    products, cdn = parse_products_xml(products_xml, url_version, allowed_platforms)
+    products, cdn = parse_products_xml(products_xml_text, url_version, allowed_platforms)
 
-    print('CDN: ' + cdn)
+    print('\nCDN: ' + cdn + '\n')
+    set_cdn(cdn)
+
     sap_codes = {}
     for p in products.values():
         if not p['hidden']:
@@ -227,10 +136,10 @@ def get_products(allowed_platforms, args):
                     last_v = v['productVersion']
             if last_v:
                 sap_codes[p['sapCode']] = p['displayName']
-    print(str(len(sap_codes)) + ' products found:')
+    print('Total ' + str(len(sap_codes)) + ' products found.')
 
     if args.sapCode and products.get(args.sapCode.upper()) is None:
         print('Provided SAP Code not found in products: ' + args.sapCode)
         args.sapCode = None
 
-    return products, cdn, sap_codes
+    return products, sap_codes
