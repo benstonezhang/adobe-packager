@@ -1,7 +1,12 @@
+import os
+import platform
 from collections import OrderedDict
-from xml.etree import ElementTree as ET
 
-from ccdl.net import set_cdn, set_header_auth, fetch_products_xml
+from ccdl.mac import get_all_platforms as get_all_mac_platforms
+from ccdl.mac import get_platforms as get_mac_platforms
+from ccdl.net import set_cdn, fetch_products_xml
+from ccdl.win import get_all_platforms as get_all_win_platforms
+from ccdl.win import get_platforms as get_win_platforms
 
 DRIVER_XML = '''<DriverInfo>
     <ProductInfo>
@@ -28,10 +33,8 @@ DRIVER_XML_DEPENDENCY = '''
 '''
 
 
-def parse_products_xml(products_xml_text, url_version, allowed_platforms):
+def parse_products_xml(products_xml, url_version, allowed_platforms):
     """Parsing the XML."""
-    products_xml = ET.fromstring(products_xml_text)
-
     if url_version == 6:
         prefix = 'channels/'
     else:
@@ -100,7 +103,7 @@ def get_url_version(url_version):
             url_version = None
 
     while not url_version:
-        val = input('Please enter the URL version(v4/v5/v6) for downloading products.xml, default is the latest: ') \
+        val = input('Please enter the URL version(v4/v5/v6) for downloading products xml, default is the latest: ') \
               or 'v6'
         if val == 'v4' or val == '4':
             url_version = 4
@@ -114,14 +117,25 @@ def get_url_version(url_version):
     return url_version
 
 
-def get_products(allowed_platforms, args):
-    set_header_auth(args.auth)
+def get_platforms(target_os=platform.system().lower(), target_arch=None):
+    if target_arch is not None:
+        target_arch = target_arch.lower()
 
+    if target_os == 'darwin':
+        return get_all_mac_platforms(), get_mac_platforms(target_arch)
+    elif target_os == 'windows':
+        return get_all_win_platforms(), get_win_platforms(target_arch)
+    else:
+        print('Unsupported OS platform: ' + target_os)
+        exit(1)
+
+
+def get_products(all_platforms, allowed_platforms, args):
     url_version = get_url_version(args.urlVersion)
-    products_xml_text = fetch_products_xml(url_version, allowed_platforms)
+    products_xml = fetch_products_xml(url_version, all_platforms)
 
-    print('Parsing products.xml')
-    products, cdn = parse_products_xml(products_xml_text, url_version, allowed_platforms)
+    print('Parsing products xml')
+    products, cdn = parse_products_xml(products_xml, url_version, allowed_platforms)
 
     print('\nCDN: ' + cdn + '\n')
     set_cdn(cdn)
@@ -143,3 +157,20 @@ def get_products(allowed_platforms, args):
         args.sapCode = None
 
     return products, sap_codes
+
+
+def save_driver_xml(products_dir, product, prod_info, ap_platform, install_language):
+    print('Generating driver.xml')
+    driver = DRIVER_XML.format(
+        name=product['displayName'],
+        sapCode=prod_info['sapCode'],
+        version=prod_info['productVersion'],
+        installPlatform=ap_platform,
+        dependencies='\n'.join([DRIVER_XML_DEPENDENCY.format(
+            sapCode=d['sapCode'],
+            version=d['version']
+        ) for d in prod_info['dependencies']]),
+        language=install_language
+    )
+    with open(os.path.join(products_dir, 'driver.xml'), 'w') as f:
+        f.write(driver)

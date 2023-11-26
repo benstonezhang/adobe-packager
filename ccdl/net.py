@@ -1,20 +1,14 @@
+import json
 import os
 import random
 import shutil
 import string
-import sys
+from xml.etree import ElementTree as ET
 
 import requests
+from tqdm.auto import tqdm
 
-try:
-    from tqdm.auto import tqdm
-except ImportError:
-    print("Trying to Install required module: tqdm\n")
-    os.system('pip3 install --user tqdm')
-    try:
-        from tqdm.auto import tqdm
-    except ImportError:
-        sys.exit('Please install module tqdm from http://pypi.python.org/pypi/tqdm or run: pip3 install tqdm.')
+from ccdl.utils import check_archive
 
 ADOBE_PRODUCTS_XML_URL = 'https://prod-rel-ffc-ccm.oobesaas.adobe.com/adobe-ffc-external/core/v{urlVersion}/products/' \
                          'all?_type=xml&channel=ccm&channel=sti&platform={installPlatform}&productType=Desktop'
@@ -31,26 +25,40 @@ ADOBE_DL_HEADERS = {
     'User-Agent': 'Creative Cloud'
 }
 
-session = requests.sessions.Session()
 cdn = None
 cache_dir = None
+session = requests.sessions.Session()
 
 
-def get_adobe_products_file(url_version, allowed_platforms):
+def set_cache_dir(path):
+    global cache_dir
+    cache_dir = path
+
+
+def set_header_auth(auth):
+    ADOBE_REQ_HEADERS['Authorization'] = auth
+
+
+def set_cdn(url):
+    global cdn
+    cdn = url
+
+
+def get_cache_products_xml(url_version, allowed_platforms):
     if cache_dir:
         path = os.path.join(cache_dir, '_products', str(url_version), '.'.join(allowed_platforms) + '.xml')
         os.makedirs(path[:path.rfind('/')], exist_ok=True)
         return path
 
 
-def get_adobe_product_json(build_guid):
+def get_cache_product_json(build_guid):
     if cache_dir:
-        path = os.path.join(cache_dir, '_builds', build_guid + '.json')
+        path = os.path.join(cache_dir, '_applications', build_guid + '.json')
         os.makedirs(path[:path.rfind('/')], exist_ok=True)
         return path
 
 
-def get_adobe_product_file(path):
+def get_cache_product_file(path):
     if cache_dir:
         path = cache_dir + path
         os.makedirs(path[:path.rfind('/')], exist_ok=True)
@@ -61,27 +69,26 @@ def get_adobe_products_url(url_version, allowed_platforms):
     return ADOBE_PRODUCTS_XML_URL.format(urlVersion=url_version, installPlatform=','.join(allowed_platforms))
 
 
-def set_header_auth(auth):
-    if auth:
-        ADOBE_REQ_HEADERS['Authorization'] = auth
+def get_block_size(total_size_in_bytes):
+    if total_size_in_bytes >> 28:
+        block_size = 0x400000
+    elif total_size_in_bytes >> 24:
+        block_size = 0x80000
+    elif total_size_in_bytes >> 20:
+        block_size = 0x10000
+    elif total_size_in_bytes >> 16:
+        block_size = 0x2000
+    else:
+        block_size = 0x400
+    return block_size
 
 
-def set_cdn(url):
-    global cdn
-    cdn = url
-
-
-def set_cache_dir(path):
-    global cache_dir
-    cache_dir = path
-
-
-def fetch_url_as_string(url, headers=ADOBE_REQ_HEADERS):
+def fetch_url_as_text(url, headers=ADOBE_REQ_HEADERS):
     """Retrieve from a url as a string."""
     print('Fetch: ' + url)
-    req = session.get(url, headers=headers)
-    req.encoding = 'utf-8'
-    return req.text
+    response = session.get(url, headers=headers)
+    response.encoding = 'utf-8'
+    return response.text
 
 
 def fetch_url_as_file(url, path, headers=ADOBE_REQ_HEADERS):
@@ -95,20 +102,11 @@ def fetch_url_as_file(url, path, headers=ADOBE_REQ_HEADERS):
         print('remove outdated file: ' + path)
         os.remove(path)
 
-    print('Fetch: ' + url)
+    print('Fetch: ' + url + ' -> ' + path)
     response = session.get(url, stream=True, headers=headers)
+    total_size_in_bytes = int(response.headers.get('content-length', 0))
+    block_size = get_block_size(total_size_in_bytes)
     if total_size_in_bytes != 0:
-        if total_size_in_bytes >> 28:
-            block_size = 0x1000000
-        elif total_size_in_bytes >> 24:
-            block_size = 0x100000
-        elif total_size_in_bytes >> 20:
-            block_size = 0x10000
-        elif total_size_in_bytes >> 16:
-            block_size = 0x1000
-        else:
-            block_size = 0x400
-
         progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True)
         with open(path, 'wb') as file:
             for data in response.iter_content(block_size):
@@ -116,74 +114,126 @@ def fetch_url_as_file(url, path, headers=ADOBE_REQ_HEADERS):
                 file.write(data)
         progress_bar.close()
         if progress_bar.n != total_size_in_bytes:
-            print("ERROR, something went wrong")
+            print("Error, expect {} bytes, received {} bytes.".format(total_size_in_bytes, progress_bar.n))
             exit(1)
     else:
         with open(path, 'wb') as file:
-            for data in response.iter_content(4096):
+            for data in response.iter_content(block_size):
+                print('.', end='', flush=True)
                 file.write(data)
+        print('')
+
+    if check_archive(path) is False:
+        print('Remove corrupt file and exit: ' + path)
+        os.remove(path)
+        exit(1)
+
+
+def parse_xml(text, path=None, corrupt_exit=False):
+    try:
+        return ET.fromstring(text)
+    except Exception as e:
+        print('XML parse failed: ' + str(e))
+        if path and os.path.exists(path):
+            os.remove(path)
+    if corrupt_exit:
+        print('Corrupt products xml received, exit')
+        exit(1)
 
 
 def fetch_products_xml(url_version, allowed_platforms):
-    adobe_xml = get_adobe_products_file(url_version, allowed_platforms)
-    if adobe_xml and os.path.exists(adobe_xml):
-        print('Read products xml from ' + adobe_xml)
-        with open(adobe_xml, 'r') as f:
-            return f.read()
+    cache_xml = get_cache_products_xml(url_version, allowed_platforms)
+    if cache_xml and os.path.exists(cache_xml):
+        print('Read products xml from ' + cache_xml)
+        with open(cache_xml, 'r') as f:
+            products_xml_text = f.read()
+        products_xml = parse_xml(products_xml_text, cache_xml)
+        if products_xml:
+            return products_xml
 
-    adobe_url = get_adobe_products_url(url_version, allowed_platforms)
+    products_url = get_adobe_products_url(url_version, allowed_platforms)
     print('Downloading products xml')
-    if adobe_xml:
-        fetch_url_as_file(adobe_url, adobe_xml)
-        with open(adobe_xml, 'r') as f:
-            return f.read()
+    if cache_xml:
+        fetch_url_as_file(products_url, cache_xml)
+        with open(cache_xml, 'r') as f:
+            products_xml_text = f.read()
+        return parse_xml(products_xml_text, cache_xml, corrupt_exit=True)
 
-    return fetch_url_as_string(adobe_url)
+    return parse_xml(fetch_url_as_text(products_url), corrupt_exit=True)
 
 
 def fetch_app_xml(path):
-    file_path = get_adobe_product_file(path)
-    if file_path and os.path.exists(file_path):
-        with open(file_path, 'r') as f:
-            return f.read()
+    cache_xml = get_cache_product_file(path)
+    if cache_xml and os.path.exists(cache_xml):
+        print('Read application xml from ' + cache_xml)
+        with open(cache_xml, 'r') as f:
+            app_xml_text = f.read()
+        app_xml = parse_xml(app_xml_text, cache_xml)
+        if app_xml:
+            return app_xml
 
-    if file_path:
-        fetch_url_as_file(cdn + path, file_path)
-        with open(file_path, 'r') as f:
-            return f.read()
+    print('Downloading application xml')
+    if cache_xml:
+        fetch_url_as_file(cdn + path, cache_xml)
+        with open(cache_xml, 'r') as f:
+            app_xml_text = f.read()
+        return parse_xml(app_xml_text, cache_xml, corrupt_exit=True)
 
-    return fetch_url_as_string(cdn + path)
+    return parse_xml(fetch_url_as_text(cdn + path), corrupt_exit=True)
+
+
+def parse_json(text, path=None, corrupt_exit=False):
+    try:
+        return json.loads(text)
+    except Exception as e:
+        print('JSON parse failed:' + str(e))
+        if path and os.path.exists(path):
+            os.remove(path)
+    if corrupt_exit:
+        print('Corrupt JSON received, exit')
+        exit(1)
 
 
 def fetch_application_json(build_guid):
     """Retrieve JSON."""
     headers = ADOBE_REQ_HEADERS.copy()
     headers['x-adobe-build-guid'] = build_guid
-    file_path = get_adobe_product_json(build_guid)
+    file_path = get_cache_product_json(build_guid)
     if file_path and os.path.exists(file_path):
         with open(file_path, 'rb') as f:
-            return f.read()
+            json_text = f.read()
+        json_obj = parse_json(json_text, file_path)
+        if json_obj:
+            return json_obj
 
     if file_path:
         fetch_url_as_file(ADOBE_APPLICATION_JSON_URL, file_path, headers)
         with open(file_path, 'rb') as f:
-            return f.read()
+            json_text = f.read()
+        return parse_json(json_text, file_path, corrupt_exit=True)
 
-    return fetch_url_as_string(ADOBE_APPLICATION_JSON_URL, headers)
+    return parse_json(fetch_url_as_text(ADOBE_APPLICATION_JSON_URL, headers), corrupt_exit=True)
 
 
-def fetch_file(path, product_dir, sap_code, version, skip_existing=False, skip_create_app=False, name=None):
+def fetch_file(path, product_dir, sap_code, version, skip_existing=False, name=None):
     """Download a file"""
+    if path[:4] != 'http':
+        url = cdn + path
+    else:
+        url = path
+        path = path[path.find('/', path.find('//') + 3):]
+
     if not name:
         name = path.split('/')[-1].split('?')[0]
-    print('[{}_{}] Downloading {}'.format(sap_code, version, name))
+    print('[{}_{}] Retrieve {}'.format(sap_code, version, name))
 
-    url = cdn + path
-    cache_file_path = get_adobe_product_file(path)
+    cache_file_path = get_cache_product_file(path)
     fetch_url_as_file(url, cache_file_path)
 
-    file_path = os.path.join(product_dir, name)
-    if skip_existing and os.path.isfile(file_path) and os.path.getsize(file_path) == os.path.getsize(cache_file_path):
-        print('[{}_{}] {} already exists, skipping'.format(sap_code, version, name))
-    elif skip_create_app is False:
-        shutil.copyfile(cache_file_path, file_path)
+    if product_dir:
+        file_path = os.path.join(product_dir, name)
+        if skip_existing and os.path.isfile(file_path) and \
+                os.path.getsize(file_path) == os.path.getsize(cache_file_path):
+            print('[{}_{}] {} already exists, skipping'.format(sap_code, version, name))
+        else:
+            shutil.copyfile(cache_file_path, file_path)

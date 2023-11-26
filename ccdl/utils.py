@@ -1,3 +1,6 @@
+import zipfile
+
+
 def question_y(question: str) -> bool:
     """Question prompt default Y."""
     reply = None
@@ -22,3 +25,20 @@ def get_download_path(dest_path):
         dest_path = input('Please input destination: ')
         print('Using destination: ' + dest_path)
     return dest_path
+
+
+def check_archive(path):
+    ok = None
+
+    if path[-4:] == '.zip':
+        print('checking zip archive ... ', end='', flush=True)
+        if zipfile.is_zipfile(path):
+            ok = zipfile.ZipFile(path).testzip() is None
+        else:
+            ok = False
+
+    if ok is True:
+        print('OK')
+    elif ok is False:
+        print('Error')
+    return ok

@@ -6,7 +6,7 @@ import platform
 from ccdl.acrobat import download_acrobat
 from ccdl.mac import create_app_skeleton as create_mac_app_skeleton
 from ccdl.net import fetch_application_json, fetch_file
-from ccdl.prod import DRIVER_XML, DRIVER_XML_DEPENDENCY
+from ccdl.prod import save_driver_xml
 from ccdl.utils import get_download_path
 from ccdl.win import create_app_skeleton as create_win_app_skeleton
 
@@ -18,7 +18,7 @@ def create_app_skeleton(install_app_path, icon_path):
     elif target_os == 'windows':
         create_win_app_skeleton(install_app_path, icon_path)
     else:
-        print('Target OS not support')
+        print('Unsupported target OS platform: ' + target_os)
         exit(1)
 
 
@@ -118,7 +118,7 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
                 if os_lang not in app_locales:
                     print('{} is not available. Please use a value from the list above.'.format(os_lang))
 
-    dest = get_download_path(args.destination)
+    dest = None if args.noPack else get_download_path(args.destination)
     print('')
 
     prod_info = version_products[version]
@@ -143,45 +143,43 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
         {'sapCode': prod_info['sapCode'], 'version': prod_info['productVersion'], 'buildGuid': prod_info['buildGuid']})
     ap_platform = prod_info['apPlatform']
     install_app_name = 'Install {}_{}-{}-{}.app'.format(sap_code, version, install_language, ap_platform)
-    install_app_path = os.path.join(dest, install_app_name)
     print('sapCode: ' + sap_code)
     print('version: ' + version)
     print('installLanguage: ' + install_language)
-    print('dest: ' + install_app_path)
+    if not args.noPack:
+        install_app_path = os.path.join(dest, install_app_name)
+        print('dest: ' + install_app_path)
     print(prods_to_download)
 
-    if args.skipCreateApp is False:
+    if not args.noPack:
         print('\nCreating {}'.format(install_app_name))
         create_app_skeleton(os.path.join(dest, install_app_path), args.icon)
+        products_dir = os.path.join(install_app_path, 'Contents', 'Resources', 'products')
 
     print('Preparing...')
-    products_dir = os.path.join(install_app_path, 'Contents', 'Resources', 'products')
-
     for p in prods_to_download:
         s, v = p['sapCode'], p['version']
-        product_dir = os.path.join(products_dir, s)
-        app_json_path = os.path.join(product_dir, 'application.json')
 
-        print('[{}_{}] Downloading application.json'.format(s, v))
-        app_json = json.loads(fetch_application_json(p['buildGuid']))
-        p['application_json'] = app_json
+        print('[{}_{}] Retrieve application.json, guid={}'.format(s, v, p['buildGuid']))
+        p['application_json'] = fetch_application_json(p['buildGuid'])
 
-        if args.skipCreateApp:
+        if args.noPack:
             continue
 
         print('[{}_{}] Creating folder for product'.format(s, v))
+        product_dir = os.path.join(products_dir, s)
+        app_json_path = os.path.join(product_dir, 'application.json')
         os.makedirs(product_dir, exist_ok=True)
 
         print('[{}_{}] Saving application.json'.format(s, v))
         with open(app_json_path, 'w') as file:
-            json.dump(app_json, file, separators=(',', ':'))
+            json.dump(p['application_json'], file, separators=(',', ':'))
 
     print('Downloading...')
 
     for p in prods_to_download:
         s, v = p['sapCode'], p['version']
         app_json = p['application_json']
-        product_dir = os.path.join(products_dir, s)
 
         print('[{}_{}] Parsing available packages'.format(s, v))
         core_pkg_count = 0
@@ -205,25 +203,12 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
         print('[{}_{}] Selected {} core packages and {} non-core packages'.format(
             s, v, core_pkg_count, non_core_pkg_count))
 
+        product_dir = None if args.noPack else os.path.join(products_dir, s)
         for path in download_paths:
-            fetch_file(path, product_dir, s, v, args.skipExisting, args.skipCreateApp)
+            fetch_file(path, product_dir, s, v, args.skipExisting)
 
-    print('Package download finished.')
+    print('Package retrieve finished.')
 
-    if args.skipCreateApp is False:
-        print('Generating driver.xml')
-        driver = DRIVER_XML.format(
-            name=product['displayName'],
-            sapCode=prod_info['sapCode'],
-            version=prod_info['productVersion'],
-            installPlatform=ap_platform,
-            dependencies='\n'.join([DRIVER_XML_DEPENDENCY.format(
-                sapCode=d['sapCode'],
-                version=d['version']
-            ) for d in prod_info['dependencies']]),
-            language=install_language
-        )
-        with open(os.path.join(products_dir, 'driver.xml'), 'w') as f:
-            f.write(driver)
-
-    print('\nPackage successfully created. Run {} to install.'.format(install_app_path))
+    if not args.noPack:
+        save_driver_xml(products_dir, product, prod_info, ap_platform, install_language)
+        print('\nPackage successfully created. Run {} to install.'.format(install_app_path))
