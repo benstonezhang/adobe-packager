@@ -1,5 +1,4 @@
 import os
-from xml.etree import ElementTree as ET
 
 from ccdl.net import fetch_file, fetch_app_xml
 from ccdl.utils import get_download_path
@@ -7,7 +6,7 @@ from ccdl.utils import get_download_path
 
 def download_acrobat(app_info, args):
     """Download APRO"""
-    manifest = ET.fromstring(fetch_app_xml(app_info['buildGuid']))
+    manifest = fetch_app_xml(app_info['buildGuid'])
     download_url = manifest.find('asset_list/asset/asset_path').text
 
     sap_code = app_info['sapCode']
@@ -17,13 +16,11 @@ def download_acrobat(app_info, args):
     print('\nsapCode: ' + sap_code)
     print('version: ' + version)
     print('installLanguage: ' + 'ALL')
-    if args.noPack:
-        dest = None
-    else:
-        dest = get_download_path(args.destination)
-        print('dest: ' + os.path.join(dest, name))
+    app_path = get_download_path(args.target)
+    if app_path:
+        print('destination: ' + os.path.join(app_path, name))
 
-    fetch_file(download_url, dest, sap_code, version, args.skipExisting, name)
-    if not args.noPack:
-        print('Installer successfully retrieved. Open ' + os.path.join(dest, name) + \
-              ' and run Acrobat/Acrobat DC Installer.pkg to install.')
+    fetch_file(download_url, app_path, sap_code, version, name)
+    if app_path:
+        print('Installer successfully retrieved. Open ' + os.path.join(app_path, name) + \
+              ' and run installer application.')

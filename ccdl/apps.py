@@ -4,11 +4,11 @@ import os
 import platform
 
 from ccdl.acrobat import download_acrobat
-from ccdl.mac import create_app_skeleton as create_mac_app_skeleton
+from ccdl.mac import create_installer as create_mac_app_skeleton
 from ccdl.net import fetch_application_json, fetch_file
 from ccdl.prod import save_driver_xml
 from ccdl.utils import get_download_path
-from ccdl.win import create_app_skeleton as create_win_app_skeleton
+from ccdl.win import create_installer as create_win_app_skeleton
 
 
 def create_app_skeleton(install_app_path, icon_path):
@@ -23,17 +23,18 @@ def create_app_skeleton(install_app_path, icon_path):
 
 
 def download_adobe_app(products, sap_codes, allowed_platforms, args):
-    """Run Main exicution."""
-    sap_code = args.sapCode
+    """Run main execution"""
+    sap_code = args.sap_code
     if not sap_code:
         print('')
         for s, d in sap_codes.items():
             print('  [{}]{}{}'.format(s, (10 - len(s)) * ' ', d))
+        print('')
 
         while sap_code is None:
             val = input('Please enter the SAP Code of the desired product (eg. PHSP for Photoshop): ').upper() \
                   or 'PHSP'
-            if products.get(val):
+            if products.get(val) and sap_codes.get(val):
                 sap_code = val
             else:
                 print('{} is not a valid SAP Code. Please use a value from the list above.'.format(val))
@@ -41,13 +42,12 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
     product = products.get(sap_code)
     version_products = product['versions']
     version = None
-    if args.version:
-        if version_products.get(args.version):
-            print('Using provided version: ' + args.version)
-            version = args.version
+    if args.app_version:
+        if version_products.get(args.app_version):
+            print('Using provided version: ' + args.app_version)
+            version = args.app_version
         else:
-            print('Provided version not found: ' + args.version)
-    print('')
+            print('Provided version not found: ' + args.app_version)
 
     if not version:
         last_v = None
@@ -55,6 +55,9 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
             if v['buildGuid'] and v['apPlatform'] in allowed_platforms:
                 print('{} Platform: {} - {}'.format(product['displayName'], v['apPlatform'], v['productVersion']))
                 last_v = v['productVersion']
+        if last_v is None:
+            print('')
+            return
 
         while version is None:
             val = input('Please enter the desired version. Nothing for ' + last_v + ': ') or last_v
@@ -69,57 +72,35 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
         return
 
     app_locales = version_products[version]['locale']
-    install_locales = app_locales.copy()
-    install_locales.append('ALL')
+    all_locales = app_locales.copy()
+    all_locales.append('ALL')
+    print('Available languages: {}'.format(', '.join(all_locales)))
 
-    # Detecting Current set default Os language. Fixed.
-    default_locale = locale.getlocale()[0]
-    if not default_locale:
-        default_locale = 'en_US'
+    # Detecting current OS language.
+    os_lang = locale.getlocale()[0]
+    if not os_lang:
+        os_lang = 'en_US'
 
-    os_lang = None
-    if args.osLanguage:
-        os_lang = args.osLanguage
-    elif default_locale:
-        os_lang = default_locale
-
-    if os_lang in app_locales:
-        default_lang = os_lang
+    app_lang = args.language
+    if app_lang in all_locales:
+        print('Using provided language: ' + args.language)
     else:
-        default_lang = 'en_US'
+        if app_lang is not None:
+            print('Provided language not available: ' + args.language)
+        app_lang = None
 
-    install_language = None
-    if args.installLanguage:
-        if args.installLanguage in install_locales:
-            print('Using provided language: ' + args.installLanguage)
-            install_language = args.installLanguage
+    while app_lang is None:
+        val = input(f'Please enter the desired install language, or nothing for [{os_lang}]: ') or os_lang
+        if len(val) == 5:
+            val = val[0:2].lower() + val[2] + val[3:5].upper()
+        elif len(val) == 3:
+            val = val.upper()
+        if val in all_locales:
+            app_lang = val
         else:
-            print('Provided language not available: ' + args.installLanguage)
+            print('{} is not available. Please use a value from the list above.'.format(val))
 
-    if not install_language:
-        print('Available languages: {}'.format(', '.join(install_locales)))
-        while install_language is None:
-            val = input(
-                f'Please enter the desired install language, or nothing for [{default_lang}]: ') or default_lang
-            if len(val) == 5:
-                val = val[0:2].lower() + val[2] + val[3:5].upper()
-            elif len(val) == 3:
-                val = val.upper()
-            if val in install_locales:
-                install_language = val
-            else:
-                print('{} is not available. Please use a value from the list above.'.format(val))
-    if os_lang != install_language:
-        if install_language != 'ALL':
-            while os_lang not in app_locales:
-                print('Could not detect your default Language for OS.')
-                os_lang = input(
-                    f'Please enter the your OS Language, or nothing for [{install_language}]: ') or install_language
-                if os_lang not in app_locales:
-                    print('{} is not available. Please use a value from the list above.'.format(os_lang))
-
-    dest = None if args.noPack else get_download_path(args.destination)
-    print('')
+    app_path = get_download_path(args.target)
 
     prod_info = version_products[version]
     prods_to_download = []
@@ -142,18 +123,18 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
         0,
         {'sapCode': prod_info['sapCode'], 'version': prod_info['productVersion'], 'buildGuid': prod_info['buildGuid']})
     ap_platform = prod_info['apPlatform']
-    install_app_name = 'Install {}_{}-{}-{}.app'.format(sap_code, version, install_language, ap_platform)
+    install_app_name = 'Install {}_{}-{}-{}.app'.format(sap_code, version, app_lang, ap_platform)
     print('sapCode: ' + sap_code)
     print('version: ' + version)
-    print('installLanguage: ' + install_language)
-    if not args.noPack:
-        install_app_path = os.path.join(dest, install_app_name)
+    print('install_language: ' + app_lang)
+    if app_path:
+        install_app_path = os.path.join(app_path, install_app_name)
         print('dest: ' + install_app_path)
     print(prods_to_download)
 
-    if not args.noPack:
+    if app_path:
         print('\nCreating {}'.format(install_app_name))
-        create_app_skeleton(os.path.join(dest, install_app_path), args.icon)
+        create_app_skeleton(os.path.join(app_path, install_app_path), args.icon)
         products_dir = os.path.join(install_app_path, 'Contents', 'Resources', 'products')
 
     print('Preparing...')
@@ -163,7 +144,7 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
         print('[{}_{}] Retrieve application.json, guid={}'.format(s, v, p['buildGuid']))
         p['application_json'] = fetch_application_json(p['buildGuid'])
 
-        if args.noPack:
+        if args.target is None:
             continue
 
         print('[{}_{}] Creating folder for product'.format(s, v))
@@ -191,24 +172,21 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
                 core_pkg_count += 1
                 download_paths.append(pkg['Path'])
             else:
-                # TODO: actually parse `Condition` and check it properly (and maybe look for & add support for conditions other than installLanguage)
-                if install_language == "ALL":
+                if app_lang == "ALL":
                     non_core_pkg_count += 1
                     download_paths.append(pkg['Path'])
-                else:
-                    if (not pkg.get('Condition')) or install_language in pkg['Condition'] \
-                            or os_lang in pkg['Condition']:
-                        non_core_pkg_count += 1
-                        download_paths.append(pkg['Path'])
+                elif (not pkg.get('Condition')) or app_lang in pkg['Condition']:
+                    non_core_pkg_count += 1
+                    download_paths.append(pkg['Path'])
         print('[{}_{}] Selected {} core packages and {} non-core packages'.format(
             s, v, core_pkg_count, non_core_pkg_count))
 
-        product_dir = None if args.noPack else os.path.join(products_dir, s)
+        product_dir = os.path.join(products_dir, s) if args.target else None
         for path in download_paths:
-            fetch_file(path, product_dir, s, v, args.skipExisting)
+            fetch_file(path, product_dir, s, v)
 
     print('Package retrieve finished.')
 
-    if not args.noPack:
-        save_driver_xml(products_dir, product, prod_info, ap_platform, install_language)
+    if args.target:
+        save_driver_xml(products_dir, product, prod_info, ap_platform, app_lang)
         print('\nPackage successfully created. Run {} to install.'.format(install_app_path))

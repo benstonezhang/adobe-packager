@@ -1,11 +1,6 @@
 import os
-import platform
 import shutil
 from subprocess import PIPE, Popen
-
-from ccdl.utils import question_y
-
-ADOBE_PRODUCTS_PLATFORMS = ['macuniversal', 'macarm64', 'osx10-64', 'osx10']
 
 ADOBE_CC_MAC_ICON_PATH = '/Library/Application Support/Adobe/Adobe Desktop Common/HDBox/Install.app/Contents/Resources/CreativeCloudInstaller.icns'
 MAC_VOLUME_ICON_PATH = '/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/CDAudioVolumeIcon.icns'
@@ -167,41 +162,25 @@ function run() {
 '''
 
 
-def get_all_platforms():
-    return ADOBE_PRODUCTS_PLATFORMS
-
-
 def get_platforms(target_arch):
-    is_arm = None
-    if target_arch is not None:
-        if target_arch == 'x86_64' or target_arch == 'x64' or target_arch == 'intel':
-            is_arm = False
-        elif target_arch == 'arm64' or target_arch == 'arm':
-            is_arm = True
-        else:
-            print('Invalid argument "{}" for {}'.format(target_arch, 'architecture'))
-
-    if is_arm is None:
-        if platform.machine() == 'arm64':
-            is_arm = question_y('Do you want to make Apple Silicon native packages')
-        else:
-            is_arm = False
-
-    if is_arm:
+    if target_arch == 'any':
+        return ['macuniversal', 'macarm64', 'osx10-64', 'osx10']
+    elif target_arch == 'universal':
+        return ['macuniversal']
+    elif target_arch == 'arm64' or target_arch == 'arm':
         print('Note: If the Adobe program is NOT listed here, there is no native M1 version. Use the non native '
               'version with Rosetta 2 until an M1 version is available.')
-        return ADOBE_PRODUCTS_PLATFORMS[:2]
+        return ['macuniversal', 'macarm64']
+    elif target_arch == 'x86_64' or target_arch == 'x64':
+        return ['macuniversal', 'osx10-64', 'osx10']
     else:
-        return [ADOBE_PRODUCTS_PLATFORMS[0], ADOBE_PRODUCTS_PLATFORMS[2], ADOBE_PRODUCTS_PLATFORMS[3]]
+        print('Invalid argument "{}" for {}'.format(target_arch, 'architecture'))
 
 
-def create_app_skeleton(app_path, icon_path):
+def create_installer(app_path, icon_path):
     with Popen(['/usr/bin/osacompile', '-l', 'JavaScript', '-o', app_path], stdin=PIPE) as p:
         p.communicate(INSTALL_APP_APPLE_SCRIPT.encode('utf-8'))
 
     if icon_path is None:
-        if os.path.isfile(ADOBE_CC_MAC_ICON_PATH):
-            icon_path = ADOBE_CC_MAC_ICON_PATH
-        else:
-            icon_path = MAC_VOLUME_ICON_PATH
+        icon_path = ADOBE_CC_MAC_ICON_PATH if os.path.isfile(ADOBE_CC_MAC_ICON_PATH) else MAC_VOLUME_ICON_PATH
     shutil.copyfile(icon_path, os.path.join(app_path, 'Contents', 'Resources', 'applet.icns'))

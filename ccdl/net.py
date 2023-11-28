@@ -10,7 +10,7 @@ from tqdm.auto import tqdm
 
 from ccdl.utils import check_archive
 
-ADOBE_PRODUCTS_XML_URL = 'https://prod-rel-ffc-ccm.oobesaas.adobe.com/adobe-ffc-external/core/v{urlVersion}/products/' \
+ADOBE_PRODUCTS_XML_URL = 'https://prod-rel-ffc-ccm.oobesaas.adobe.com/adobe-ffc-external/core/v{url_version}/products/' \
                          'all?_type=xml&channel=ccm&channel=sti&platform={installPlatform}&productType=Desktop'
 ADOBE_APPLICATION_JSON_URL = 'https://cdn-ffc.oobesaas.adobe.com/core/v3/applications'
 
@@ -46,7 +46,7 @@ def set_cdn(url):
 
 def get_cache_products_xml(url_version, allowed_platforms):
     if cache_dir:
-        path = os.path.join(cache_dir, '_products', str(url_version), '.'.join(allowed_platforms) + '.xml')
+        path = os.path.join(cache_dir, '_products', str(url_version), '_'.join(allowed_platforms) + '.xml')
         os.makedirs(path[:path.rfind('/')], exist_ok=True)
         return path
 
@@ -66,7 +66,7 @@ def get_cache_product_file(path):
 
 
 def get_adobe_products_url(url_version, allowed_platforms):
-    return ADOBE_PRODUCTS_XML_URL.format(urlVersion=url_version, installPlatform=','.join(allowed_platforms))
+    return ADOBE_PRODUCTS_XML_URL.format(url_version=url_version, installPlatform=','.join(allowed_platforms))
 
 
 def get_block_size(total_size_in_bytes):
@@ -102,26 +102,42 @@ def fetch_url_as_file(url, path, headers=ADOBE_REQ_HEADERS):
         print('remove outdated file: ' + path)
         os.remove(path)
 
-    print('Fetch: ' + url + ' -> ' + path)
-    response = session.get(url, stream=True, headers=headers)
-    total_size_in_bytes = int(response.headers.get('content-length', 0))
-    block_size = get_block_size(total_size_in_bytes)
-    if total_size_in_bytes != 0:
-        progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True)
-        with open(path, 'wb') as file:
-            for data in response.iter_content(block_size):
-                progress_bar.update(len(data))
-                file.write(data)
-        progress_bar.close()
-        if progress_bar.n != total_size_in_bytes:
-            print("Error, expect {} bytes, received {} bytes.".format(total_size_in_bytes, progress_bar.n))
-            exit(1)
-    else:
-        with open(path, 'wb') as file:
-            for data in response.iter_content(block_size):
-                print('.', end='', flush=True)
-                file.write(data)
-        print('')
+    print('Fetch: ' + url + '\n   --> ' + path)
+    try_count = 0
+    while try_count < 3:
+        response = session.get(url, stream=True, headers=headers)
+        total_size_in_bytes = int(response.headers.get('content-length', 0))
+        block_size = get_block_size(total_size_in_bytes)
+        if total_size_in_bytes != 0:
+            progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True)
+            with open(path, 'wb') as file:
+                try:
+                    for data in response.iter_content(block_size):
+                        progress_bar.update(len(data))
+                        file.write(data)
+                except ConnectionError:
+                    print('Connection error, try again')
+                    progress_bar.close()
+                    try_count += 1
+                    continue
+
+            progress_bar.close()
+            if progress_bar.n < total_size_in_bytes:
+                print("Error, expect {} bytes, received {} bytes.".format(total_size_in_bytes, progress_bar.n))
+                exit(1)
+            break
+        else:
+            with open(path, 'wb') as file:
+                try:
+                    for data in response.iter_content(block_size):
+                        print('.', end='', flush=True)
+                        file.write(data)
+                except ConnectionError:
+                    print('Connection error, try again')
+                    try_count += 1
+                    continue
+            print('')
+            break
 
     if check_archive(path) is False:
         print('Remove corrupt file and exit: ' + path)
@@ -215,7 +231,7 @@ def fetch_application_json(build_guid):
     return parse_json(fetch_url_as_text(ADOBE_APPLICATION_JSON_URL, headers), corrupt_exit=True)
 
 
-def fetch_file(path, product_dir, sap_code, version, skip_existing=False, name=None):
+def fetch_file(path, app_dir, sap_code, version, name=None):
     """Download a file"""
     if path[:4] != 'http':
         url = cdn + path
@@ -230,10 +246,9 @@ def fetch_file(path, product_dir, sap_code, version, skip_existing=False, name=N
     cache_file_path = get_cache_product_file(path)
     fetch_url_as_file(url, cache_file_path)
 
-    if product_dir:
-        file_path = os.path.join(product_dir, name)
-        if skip_existing and os.path.isfile(file_path) and \
-                os.path.getsize(file_path) == os.path.getsize(cache_file_path):
+    if app_dir:
+        file_path = os.path.join(app_dir, name)
+        if os.path.isfile(file_path) and os.path.getsize(file_path) == os.path.getsize(cache_file_path):
             print('[{}_{}] {} already exists, skipping'.format(sap_code, version, name))
         else:
             shutil.copyfile(cache_file_path, file_path)

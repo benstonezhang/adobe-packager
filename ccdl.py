@@ -42,7 +42,7 @@ from ccdl.net import set_cache_dir, set_header_auth
 from ccdl.prod import get_products, get_platforms
 from ccdl.utils import question_y
 
-VERSION_STR = '0.2.0'
+VERSION_STR = '0.3.0'
 
 
 def show_version():
@@ -61,34 +61,28 @@ if __name__ == '__main__':
     show_version()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-u', '--urlVersion',
+    parser.add_argument('-u', '--url_version',
                         help="Get app info from v4/v5/v6 url (eg. v6)", action='store')
-    parser.add_argument('-O', '--os',
+    parser.add_argument('-o', '--os',
                         help='Set the target Operation System', action='store')
     parser.add_argument('-a', '--arch',
                         help='Set the architecture to download', action='store')
-    parser.add_argument('-o', '--osLanguage',
-                        help='OS Language code (eg. en_US)', action='store')
-    parser.add_argument('-l', '--installLanguage',
-                        help='Language code (eg. en_US)', action='store')
-    parser.add_argument('-s', '--sapCode',
+    parser.add_argument('-l', '--language',
+                        help='Language code (eg. en_US) or ALL', action='store')
+    parser.add_argument('-s', '--sap_code',
                         help='SAP code for desired product (eg. PHSP)', action='store')
-    parser.add_argument('-v', '--version',
+    parser.add_argument('-v', '--app_version',
                         help='Version of desired product (eg. 21.0.3)', action='store')
-    parser.add_argument('-d', '--destination',
-                        help='Directory to download installation files to', action='store')
-    parser.add_argument('-A', '--auth',
+    parser.add_argument('-z', '--auth',
                         help='Add a bearer_token to to authenticate your account, e.g. downloading Xd', action='store')
-    parser.add_argument('-I', '--icon',
-                        help='Icon file of installer app, else use Creative Cloud icon', action='store')
-    parser.add_argument('--noRepeatPrompt',
-                        help="Don't prompt for additional downloads", action='store_true')
-    parser.add_argument('--skipExisting',
-                        help="Skip existing files, e.g. resuming failed downloads", action='store_true')
     parser.add_argument('-c', '--cache',
-                        help="Cache folder for products xml", action='store')
-    parser.add_argument('-P', '--noPack',
-                        help="Don't pack artifacts into installer app", action='store_true')
+                        help="Cache folder for product artifacts", action='store')
+    parser.add_argument('-t', '--target',
+                        help='Pack application artifacts as installer in target directory', action='store')
+    parser.add_argument('-i', '--icon',
+                        help='Icon file of installer, else use Creative Cloud icon', action='store')
+    parser.add_argument('-q', '--no_repeat_prompt',
+                        help="Don't prompt for additional downloads", action='store_true')
     args = parser.parse_args()
 
     if args.icon and not os.path.isfile(args.icon):
@@ -99,8 +93,6 @@ if __name__ == '__main__':
         set_cache_dir(args.cache)
     if args.auth:
         set_header_auth(args.auth)
-    if args.noPack:
-        args.destination = '/tmp'
 
     all_platforms, allowed_platforms = get_platforms(args.os, args.arch)
     products, sap_codes = get_products(all_platforms, allowed_platforms, args)
@@ -108,5 +100,5 @@ if __name__ == '__main__':
 
     while True:
         download_adobe_app(products, sap_codes, allowed_platforms, args)
-        if args.noRepeatPrompt or not question_y('\nCreate another package'):
+        if args.no_repeat_prompt or not question_y('\nCreate another package'):
             break

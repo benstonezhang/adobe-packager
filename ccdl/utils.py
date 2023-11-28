@@ -17,14 +17,15 @@ def question_n(question: str) -> bool:
     return reply in ("y", "Y")
 
 
-def get_download_path(dest_path):
-    if dest_path:
-        print('Using provided destination: ' + dest_path)
-    else:
-        """Ask for desired download folder"""
-        dest_path = input('Please input destination: ')
-        print('Using destination: ' + dest_path)
-    return dest_path
+def get_download_path(path):
+    if path:
+        if path.lower() == 'ask':
+            """Ask for desired download folder"""
+            path = input('Please input destination: ')
+            print('Using destination: ' + path)
+        else:
+            print('Using provided destination: ' + path)
+    return path
 
 
 def check_archive(path):
