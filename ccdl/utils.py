@@ -1,5 +1,7 @@
 import zipfile
 
+DRIVER_XML_NAME = 'driver.xml'
+
 
 def question_y(question: str) -> bool:
     """Question prompt default Y."""

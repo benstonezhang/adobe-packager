@@ -3,9 +3,11 @@ import os
 import random
 import shutil
 import string
+import time
 from xml.etree import ElementTree as ET
 
 import requests
+from requests.exceptions import ReadTimeout, ConnectionError
 from tqdm.auto import tqdm
 
 from ccdl.utils import check_archive
@@ -28,6 +30,9 @@ ADOBE_DL_HEADERS = {
 cdn = None
 cache_dir = None
 session = requests.sessions.Session()
+session_timeout = 15
+session_retry_count = 10
+session_retry_delay = 3
 
 
 def set_cache_dir(path):
@@ -86,14 +91,64 @@ def get_block_size(total_size_in_bytes):
 def fetch_url_as_text(url, headers=ADOBE_REQ_HEADERS):
     """Retrieve from a url as a string."""
     print('Fetch: ' + url)
-    response = session.get(url, headers=headers)
-    response.encoding = 'utf-8'
-    return response.text
+    for _ in range(0, session_retry_count):
+        try:
+            response = session.get(url, headers=headers, timeout=session_timeout)
+            response.encoding = 'utf-8'
+            return response.text
+        except (ConnectionError, ReadTimeout):
+            time.sleep(session_retry_delay)
+    print('Connection error, give up')
+    exit(1)
+
+
+def fetch_url_head(url, headers):
+    for _ in range(0, session_retry_count):
+        try:
+            return session.head(url, stream=True, headers=headers, timeout=session_timeout)
+        except (ConnectionError, ReadTimeout):
+            time.sleep(session_retry_delay)
+    print('Connection error, give up')
+    exit(1)
+
+
+def fetch_url_get_progress(url, path, headers):
+    print('Fetch: ' + url + '\n   --> ' + path)
+    for _ in range(0, session_retry_count):
+        progress_bar = None
+        try:
+            response = session.get(url, stream=True, headers=headers, timeout=session_timeout)
+            total_size_in_bytes = int(response.headers.get('content-length', 0))
+            block_size = get_block_size(total_size_in_bytes)
+            if total_size_in_bytes != 0:
+                progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True)
+                with open(path, 'wb') as file:
+                    for data in response.iter_content(block_size):
+                        file.write(data)
+                        progress_bar.update(len(data))
+                progress_bar.close()
+                if progress_bar.n < total_size_in_bytes:
+                    print("Error, expect {} bytes, received {} bytes.".format(total_size_in_bytes, progress_bar.n))
+                    exit(1)
+            else:
+                with open(path, 'wb') as file:
+                    for data in response.iter_content(block_size):
+                        file.write(data)
+                        print('.', end='', flush=True)
+                    print('')
+            return
+
+        except (ConnectionError, ReadTimeout):
+            if progress_bar:
+                progress_bar.close()
+            time.sleep(session_retry_delay)
+    print('Connection error, give up')
+    exit(1)
 
 
 def fetch_url_as_file(url, path, headers=ADOBE_REQ_HEADERS):
     """Retrieve from a url and save to file"""
-    response = session.head(url, stream=True, headers=headers)
+    response = fetch_url_head(url, headers)
     total_size_in_bytes = int(response.headers.get('content-length', 0))
 
     if os.path.isfile(path):
@@ -102,42 +157,7 @@ def fetch_url_as_file(url, path, headers=ADOBE_REQ_HEADERS):
         print('remove outdated file: ' + path)
         os.remove(path)
 
-    print('Fetch: ' + url + '\n   --> ' + path)
-    try_count = 0
-    while try_count < 3:
-        response = session.get(url, stream=True, headers=headers)
-        total_size_in_bytes = int(response.headers.get('content-length', 0))
-        block_size = get_block_size(total_size_in_bytes)
-        if total_size_in_bytes != 0:
-            progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True)
-            with open(path, 'wb') as file:
-                try:
-                    for data in response.iter_content(block_size):
-                        progress_bar.update(len(data))
-                        file.write(data)
-                except ConnectionError:
-                    print('Connection error, try again')
-                    progress_bar.close()
-                    try_count += 1
-                    continue
-
-            progress_bar.close()
-            if progress_bar.n < total_size_in_bytes:
-                print("Error, expect {} bytes, received {} bytes.".format(total_size_in_bytes, progress_bar.n))
-                exit(1)
-            break
-        else:
-            with open(path, 'wb') as file:
-                try:
-                    for data in response.iter_content(block_size):
-                        print('.', end='', flush=True)
-                        file.write(data)
-                except ConnectionError:
-                    print('Connection error, try again')
-                    try_count += 1
-                    continue
-            print('')
-            break
+    fetch_url_get_progress(url, path, headers)
 
     if check_archive(path) is False:
         print('Remove corrupt file and exit: ' + path)

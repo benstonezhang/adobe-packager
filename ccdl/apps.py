@@ -4,19 +4,19 @@ import os
 import platform
 
 from ccdl.acrobat import download_acrobat
-from ccdl.mac import create_installer as create_mac_app_skeleton
+from ccdl.mac import create_mac_installer as create_mac_installer
 from ccdl.net import fetch_application_json, fetch_file
 from ccdl.prod import save_driver_xml
 from ccdl.utils import get_download_path
-from ccdl.win import create_installer as create_win_app_skeleton
+from ccdl.win import create_win_installer as create_win_installer
 
 
-def create_app_skeleton(install_app_path, icon_path):
-    target_os = platform.system().lower()
+def create_installer(app_name, dest, target_os, use_gui, icon_path):
+    target_os = (platform.system() if target_os is None else target_os).lower()
     if target_os == 'darwin':
-        create_mac_app_skeleton(install_app_path, icon_path)
+        return create_mac_installer(app_name, dest, use_gui, icon_path)
     elif target_os == 'windows':
-        create_win_app_skeleton(install_app_path, icon_path)
+        return create_win_installer(app_name, dest, use_gui, icon_path)
     else:
         print('Unsupported target OS platform: ' + target_os)
         exit(1)
@@ -100,7 +100,7 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
         else:
             print('{} is not available. Please use a value from the list above.'.format(val))
 
-    app_path = get_download_path(args.target)
+    dest = get_download_path(args.target)
 
     prod_info = version_products[version]
     prods_to_download = []
@@ -118,24 +118,21 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
         if not build_guid:
             build_guid = first_guid
         prods_to_download.append({'sapCode': d['sapCode'], 'version': d['version'], 'buildGuid': build_guid})
-
     prods_to_download.insert(
         0,
         {'sapCode': prod_info['sapCode'], 'version': prod_info['productVersion'], 'buildGuid': prod_info['buildGuid']})
+
     ap_platform = prod_info['apPlatform']
-    install_app_name = 'Install {}_{}-{}-{}.app'.format(sap_code, version, app_lang, ap_platform)
     print('sapCode: ' + sap_code)
     print('version: ' + version)
     print('install_language: ' + app_lang)
-    if app_path:
-        install_app_path = os.path.join(app_path, install_app_name)
-        print('dest: ' + install_app_path)
     print(prods_to_download)
-
-    if app_path:
+    if args.target:
+        install_app_name = 'Install_{}_{}-{}-{}'.format(sap_code, version, app_lang, ap_platform)
         print('\nCreating {}'.format(install_app_name))
-        create_app_skeleton(os.path.join(app_path, install_app_path), args.icon)
-        products_dir = os.path.join(install_app_path, 'Contents', 'Resources', 'products')
+        app_base_path, install_app_path, products_dir = create_installer(
+            install_app_name, dest, args.os, args.gui, args.icon)
+        print('destination: ' + install_app_path)
 
     print('Preparing...')
     for p in prods_to_download:
@@ -188,5 +185,5 @@ def download_adobe_app(products, sap_codes, allowed_platforms, args):
     print('Package retrieve finished.')
 
     if args.target:
-        save_driver_xml(products_dir, product, prod_info, ap_platform, app_lang)
+        save_driver_xml(app_base_path, products_dir, product, prod_info, ap_platform, app_lang)
         print('\nPackage successfully created. Run {} to install.'.format(install_app_path))

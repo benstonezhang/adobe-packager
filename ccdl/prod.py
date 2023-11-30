@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 from ccdl.mac import get_platforms as get_mac_platforms
 from ccdl.net import set_cdn, fetch_products_xml
+from ccdl.utils import DRIVER_XML_NAME
 from ccdl.win import get_platforms as get_win_platforms
 
 DRIVER_XML = '''<DriverInfo>
@@ -13,10 +14,11 @@ DRIVER_XML = '''<DriverInfo>
         <CodexVersion>{version}</CodexVersion>
         <Platform>{installPlatform}</Platform>
         <EsdDirectory>./{sapCode}</EsdDirectory>
-        <Dependencies>{dependencies}</Dependencies>
+        <Dependencies>{dependencies}
+        </Dependencies>
     </ProductInfo>
     <RequestInfo>
-        <InstallDir>/Applications</InstallDir>
+        <InstallDir>{base_path}</InstallDir>
         <InstallLanguage>{language}</InstallLanguage>
     </RequestInfo>
 </DriverInfo>
@@ -27,8 +29,7 @@ DRIVER_XML_DEPENDENCY = '''
                 <SAPCode>{sapCode}</SAPCode>
                 <BaseVersion>{version}</BaseVersion>
                 <EsdDirectory>./{sapCode}</EsdDirectory>
-            </Dependency>
-'''
+            </Dependency>'''
 
 
 def parse_products_xml(products_xml, url_version, allowed_platforms):
@@ -118,9 +119,9 @@ def get_platforms(target_os=None, target_arch=None):
     target_arch = (platform.machine() if target_arch is None else target_arch).lower()
 
     if target_os == 'darwin':
-        return get_mac_platforms('any'), get_mac_platforms(target_arch)
+        return get_mac_platforms(), get_mac_platforms(target_arch)
     elif target_os == 'windows':
-        return get_win_platforms('any'), get_win_platforms(target_arch)
+        return get_win_platforms(), get_win_platforms(target_arch)
     else:
         print('Unsupported OS platform: ' + target_os)
         exit(1)
@@ -153,15 +154,16 @@ def get_products(all_platforms, allowed_platforms, args):
     return products, sap_codes
 
 
-def save_driver_xml(app_dir, product, prod_info, ap_platform, install_language):
+def save_driver_xml(app_base_path, app_dir, product, prod_info, ap_platform, install_language):
     print('Generating driver.xml')
     driver = DRIVER_XML.format(
         name=product['displayName'],
         sapCode=prod_info['sapCode'],
         version=prod_info['productVersion'],
         installPlatform=ap_platform,
-        dependencies='\n'.join([DRIVER_XML_DEPENDENCY.format(sapCode=d['sapCode'], version=d['version'])
-                                for d in prod_info['dependencies']]),
+        dependencies=''.join([DRIVER_XML_DEPENDENCY.format(sapCode=d['sapCode'], version=d['version'])
+                              for d in prod_info['dependencies']]),
+        base_path=app_base_path,
         language=install_language)
-    with open(os.path.join(app_dir, 'driver.xml'), 'w') as f:
+    with open(os.path.join(app_dir, DRIVER_XML_NAME), 'w') as f:
         f.write(driver)

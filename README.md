@@ -33,6 +33,7 @@ Yes, I am not the original creator of this script and so far I have only formatt
 ## Known issues
 
 - Postfix `macarm64` can mean `macuniversal` architecture
+- Installer script can only work with Adobe Creative Cloud version below than 5.10.0.573, else you will get error (code: -1, Adobe Setup is not Authorized). You can use version [5.9.0.372 (Win64)](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/win64/ACCCx5_9_0_372.zip), [4.9.0.504 (Win32)](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/4_9/win32/ACCCx4_9_0_504.zip) and 5.9.0.373 ([macOS arm64](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/macarm64/ACCCx5_9_0_373.dmg) or [macOS intel](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/osx10/ACCCx5_9_0_373.dmg)).
 
 ## Resolved issues
 
@@ -67,9 +68,9 @@ I repeat, the interface language settings are specific to each Adobe program and
 
 If you downloaded the application with all the language packs (by selecting "ALL"), then you can set which interface language to install this application by changing in the file `driver.xml` the text between the "InstallLanguage" tags to one of the available language interface codes available for this application. You can view them in the `application.json` file (I recommend using some JSON beautifier to make it easier to read this JSON file). If you leave the word "ALL" between these tags, then the application will be installed either with the language "en_US" and in its settings it will not be possible to change the interface language, or it will be installed with the interface language of your system and in its settings it will be possible to change the interface language.
 
-File `driver.xml` located on the path `<create_package>.app/Contents/Resouces/products`
+File `driver.xml` located on the path `<create_package>` or `<create_package>.app/Contents/Resouces/products` (macOS with GUI)
 
-The `application.json` file is located at `<create_package>.app/Contents/Resouces/products/<application_sapcode>`
+The `application.json` file is located at `<create_package>/<application_sapcode>` or `<create_package>.app/Contents/Resouces/products/<application_sapcode>` (macOS with GUI)
 
 P.S.
 

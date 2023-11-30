@@ -1,12 +1,17 @@
 import os
 import shutil
+import stat
 from subprocess import PIPE, Popen
 
-ADOBE_CC_MAC_ICON_PATH = '/Library/Application Support/Adobe/Adobe Desktop Common/HDBox/Install.app/Contents/Resources/CreativeCloudInstaller.icns'
-MAC_VOLUME_ICON_PATH = '/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/CDAudioVolumeIcon.icns'
+from ccdl.utils import DRIVER_XML_NAME
 
-INSTALL_APP_APPLE_SCRIPT = '''
-const app = Application.currentApplication()
+ADOBE_HDBOX_SETUP = '/Library/Application Support/Adobe/Adobe Desktop Common/HDBox/Setup'
+ADOBE_CC_MAC_ICON_PATH = '/Library/Application Support/Adobe/Adobe Desktop Common/HDBox/Install.app/Contents/' + \
+                         'Resources/CreativeCloudInstaller.icns'
+MAC_VOLUME_ICON_PATH = '/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/CDAudioVolumeIcon.icns'
+APPLICATIONS_PATH = '/Applications'
+
+INSTALL_APP_APPLE_SCRIPT = '''const app = Application.currentApplication()
 app.includeStandardAdditions = true
 
 ObjC.import('Cocoa')
@@ -154,16 +159,25 @@ function run() {
   }
 
   Progress.description =  "Installing packages..."
-  Progress.additionalDescription = "Preparing…"
+  Progress.additionalDescription = "Preparing..."
   Progress.totalUnitCount = 100
 
   task.waitUntilExit
 }
 '''
 
+SCRIPT_NAME = 'install.sh'
+INSTALLER_SCRIPT = '''#!/bin/sh
+echo 'Please input root password for sudo to install'
+cwd=$(dirname "$0")
+cd "$cwd"
+sudo '{hdbox_setup}' --install=1 --driverXML='{driver_xml_name}'
+echo Done
+'''.format(hdbox_setup=ADOBE_HDBOX_SETUP, driver_xml_name=DRIVER_XML_NAME)
 
-def get_platforms(target_arch):
-    if target_arch == 'any':
+
+def get_platforms(target_arch=None):
+    if not target_arch:
         return ['macuniversal', 'macarm64', 'osx10-64', 'osx10']
     elif target_arch == 'universal':
         return ['macuniversal']
@@ -177,10 +191,20 @@ def get_platforms(target_arch):
         print('Invalid argument "{}" for {}'.format(target_arch, 'architecture'))
 
 
-def create_installer(app_path, icon_path):
-    with Popen(['/usr/bin/osacompile', '-l', 'JavaScript', '-o', app_path], stdin=PIPE) as p:
-        p.communicate(INSTALL_APP_APPLE_SCRIPT.encode('utf-8'))
-
-    if icon_path is None:
-        icon_path = ADOBE_CC_MAC_ICON_PATH if os.path.isfile(ADOBE_CC_MAC_ICON_PATH) else MAC_VOLUME_ICON_PATH
-    shutil.copyfile(icon_path, os.path.join(app_path, 'Contents', 'Resources', 'applet.icns'))
+def create_mac_installer(app_name, dest, use_gui=False, icon_path=None):
+    if use_gui:
+        app_path = os.path.join(dest, app_name + '.app')
+        with Popen(['/usr/bin/osacompile', '-l', 'JavaScript', '-o', app_path], stdin=PIPE) as p:
+            p.communicate(INSTALL_APP_APPLE_SCRIPT.encode('utf-8'))
+        if icon_path is None:
+            icon_path = ADOBE_CC_MAC_ICON_PATH if os.path.isfile(ADOBE_CC_MAC_ICON_PATH) else MAC_VOLUME_ICON_PATH
+        shutil.copyfile(icon_path, os.path.join(app_path, 'Contents', 'Resources', 'applet.icns'))
+        return APPLICATIONS_PATH, app_path, os.path.join(app_path, 'Contents', 'Resources', 'products')
+    else:
+        app_path = os.path.join(dest, app_name)
+        os.makedirs(app_path, exist_ok=True)
+        script = os.path.join(app_path, SCRIPT_NAME)
+        with open(script, 'w') as f:
+            f.write(INSTALLER_SCRIPT)
+        os.chmod(script, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+        return APPLICATIONS_PATH, app_path, app_path

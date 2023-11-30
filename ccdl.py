@@ -79,8 +79,10 @@ if __name__ == '__main__':
                         help="Cache folder for product artifacts", action='store')
     parser.add_argument('-t', '--target',
                         help='Pack application artifacts as installer in target directory', action='store')
+    parser.add_argument('-g', '--gui',
+                        help='Build GUI for installer', action='store_true')
     parser.add_argument('-i', '--icon',
-                        help='Icon file of installer, else use Creative Cloud icon', action='store')
+                        help='Icon file of installer in GUI mode, else use Creative Cloud icon', action='store')
     parser.add_argument('-q', '--no_repeat_prompt',
                         help="Don't prompt for additional downloads", action='store_true')
     args = parser.parse_args()
