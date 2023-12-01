@@ -33,7 +33,7 @@ Yes, I am not the original creator of this script and so far I have only formatt
 ## Known issues
 
 - Postfix `macarm64` can mean `macuniversal` architecture
-- Installer script can only work with Adobe Creative Cloud version below than 5.10.0.573, else you will get error (code: -1, Adobe Setup is not Authorized). You can use version [5.9.0.372 (Win64)](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/win64/ACCCx5_9_0_372.zip), [4.9.0.504 (Win32)](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/4_9/win32/ACCCx4_9_0_504.zip) and 5.9.0.373 ([macOS arm64](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/macarm64/ACCCx5_9_0_373.dmg) or [macOS intel](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/osx10/ACCCx5_9_0_373.dmg)).
+- Installer script can only work with Adobe Creative Cloud version below than 5.10.0.573, else you will get error (code: -1, Adobe Setup is not Authorized). You can use version [5.9.0.372 (Win64)](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/win64/ACCCx5_9_0_372.zip), [5.5.0.617 (Win64 below 1903)](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_5_0/win64/ACCCx5_5_0_617.zip), [4.9.0.504 (Win32)](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/4_9/win32/ACCCx4_9_0_504.zip) and 5.9.0.373 ([macOS arm64](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/macarm64/ACCCx5_9_0_373.dmg) or [macOS intel](https://ccmdl.adobe.com/AdobeProducts/KCCC/CCD/5_9_0/osx10/ACCCx5_9_0_373.dmg)).
 
 ## Resolved issues
 

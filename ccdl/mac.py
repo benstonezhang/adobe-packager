@@ -170,8 +170,7 @@ SCRIPT_NAME = 'install.sh'
 INSTALLER_SCRIPT = '''#!/bin/sh
 echo 'Please input root password for sudo to install'
 cwd=$(dirname "$0")
-cd "$cwd"
-sudo '{hdbox_setup}' --install=1 --driverXML='{driver_xml_name}'
+sudo '{hdbox_setup}' --install=1 --driverXML="$cwd/{driver_xml_name}"
 echo Done
 '''.format(hdbox_setup=ADOBE_HDBOX_SETUP, driver_xml_name=DRIVER_XML_NAME)
 
@@ -196,7 +195,7 @@ def create_mac_installer(app_name, dest, use_gui=False, icon_path=None):
         app_path = os.path.join(dest, app_name + '.app')
         with Popen(['/usr/bin/osacompile', '-l', 'JavaScript', '-o', app_path], stdin=PIPE) as p:
             p.communicate(INSTALL_APP_APPLE_SCRIPT.encode('utf-8'))
-        if icon_path is None:
+        if not icon_path:
             icon_path = ADOBE_CC_MAC_ICON_PATH if os.path.isfile(ADOBE_CC_MAC_ICON_PATH) else MAC_VOLUME_ICON_PATH
         shutil.copyfile(icon_path, os.path.join(app_path, 'Contents', 'Resources', 'applet.icns'))
         return APPLICATIONS_PATH, app_path, os.path.join(app_path, 'Contents', 'Resources', 'products')

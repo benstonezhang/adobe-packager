@@ -4,17 +4,27 @@ from ccdl.utils import DRIVER_XML_NAME
 
 APPLICATIONS_PATH = 'C:\\Program Files\\Adobe'
 ADOBE_HDBOX_SETUP = 'C:\\Program Files\\Common Files\\Adobe\\Adobe Desktop Common\\HDBox\\Setup.exe'
+ADOBE_HDBOX_X86_SETUP = 'C:\\Program Files (x86)\\Common Files\\Adobe\\Adobe Desktop Common\\HDBox\\Setup.exe'
 SCRIPT_NAME = 'install.cmd'
-INSTALLER_SCRIPT = '''NET SESSION >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    cd /D "%~dp0"
-    "{hdbox_setup}" --install=1 --driverXML={driver_xml_name}
-    ECHO Done
-) ELSE (
-    ECHO Need Administrator privileges to run installer
-    powershell -command Start-Process -FilePath cmd.exe -ArgumentList '/C "%~dp0install.cmd"' -Verb RunAs
-)
-'''.format(hdbox_setup=ADOBE_HDBOX_SETUP, driver_xml_name=DRIVER_XML_NAME, script_name=SCRIPT_NAME)
+INSTALLER_SCRIPT = '''@echo off
+set hdbox_setup={hdbox_setup}
+if not exist "%hdbox_setup%" set hdbox_setup={hdbox_x86_setup}
+
+net session >nul 2>&1
+if %errorlevel% equ 0 goto runAsRoot
+
+echo Need Administrator privileges to run installer
+powershell -command Start-Process -FilePath '%hdbox_setup%' -ArgumentList '--install=1 --driverXML="{driver_xml_name}"' -WorkingDirectory '%~dp0' -Verb RunAs -Wait
+goto end
+
+:runAsRoot
+cd /d "%~dp0"
+"%hdbox_setup%" --install=1 --driverXML="{driver_xml_name}"
+
+:end
+echo Done
+'''.format(hdbox_setup=ADOBE_HDBOX_SETUP, hdbox_x86_setup=ADOBE_HDBOX_X86_SETUP, driver_xml_name=DRIVER_XML_NAME,
+           script_name=SCRIPT_NAME)
 
 
 def get_platforms(target_arch=None):

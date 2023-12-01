@@ -95,6 +95,8 @@ if __name__ == '__main__':
         set_cache_dir(args.cache)
     if args.auth:
         set_header_auth(args.auth)
+    if args.sap_code and args.app_version:
+        args.no_repeat_prompt = True
 
     all_platforms, allowed_platforms = get_platforms(args.os, args.arch)
     products, sap_codes = get_products(all_platforms, allowed_platforms, args)
