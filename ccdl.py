@@ -6,6 +6,7 @@ CHANGELOG
 (0.3.0)
 + Refine code, split to modules
 + Add cache support
++ Add cross-platform support
 
 (0.2.0)
 + Added v5 & v6 URL (Support Photoshop BETA)
