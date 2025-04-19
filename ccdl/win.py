@@ -36,6 +36,7 @@ def get_platforms(target_arch=None):
         return ['win32']
     else:
         print('Invalid argument "{}" for {}'.format(target_arch, 'architecture'))
+        exit(1)
 
 
 def create_win_installer(app_name, dest, use_gui=False, icon_path=None):

@@ -188,6 +188,7 @@ def get_platforms(target_arch=None):
         return ['macuniversal', 'osx10-64', 'osx10']
     else:
         print('Invalid argument "{}" for {}'.format(target_arch, 'architecture'))
+        exit(1)
 
 
 def create_mac_installer(app_name, dest, use_gui=False, icon_path=None):
